@@ -80,6 +80,8 @@ impl<F: Float> AudioData<F> {
     // Convert into audio block, which makes it easy to access
     // channels and frames or convert into any other layout.
     // See [audio-blocks](https://crates.io/crates/audio-blocks) for more info.
+    //
+    // Does not allocate or copy memory!
     pub fn audio_block(&self) -> AudioBlockInterleavedView<'_, F> {
         AudioBlockInterleavedView::from_slice(
             &self.interleaved_samples,
