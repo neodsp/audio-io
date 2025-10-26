@@ -99,10 +99,10 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
     let mss = MediaSourceStream::new(Box::new(src), Default::default());
 
     let mut hint = Hint::new();
-    if let Some(ext) = path.as_ref().extension() {
-        if let Some(ext_str) = ext.to_str() {
-            hint.with_extension(ext_str);
-        }
+    if let Some(ext) = path.as_ref().extension()
+        && let Some(ext_str) = ext.to_str()
+    {
+        hint.with_extension(ext_str);
     }
 
     let meta_opts: MetadataOptions = Default::default();
@@ -148,31 +148,31 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
         Stop::Frame(frame) => Some(frame),
     };
 
-    if let Some(end_frame) = end_frame {
-        if start_frame > end_frame {
-            return Err(AudioReadError::EndFrameLargerThanStartFrame(
-                end_frame,
-                start_frame,
-            ));
-        }
+    if let Some(end_frame) = end_frame
+        && start_frame > end_frame
+    {
+        return Err(AudioReadError::EndFrameLargerThanStartFrame(
+            end_frame,
+            start_frame,
+        ));
     }
 
     // If start_frame is large (more than 1 second), use seeking to avoid decoding everything
-    if start_frame > sample_rate as usize {
-        if let Some(tb) = time_base {
-            // Seek to 90% of the target to account for keyframe positioning
-            let seek_sample = (start_frame as f64 * 0.9) as u64;
-            let seek_ts = (seek_sample * tb.denom as u64) / (sample_rate as u64);
+    if start_frame > sample_rate as usize
+        && let Some(tb) = time_base
+    {
+        // Seek to 90% of the target to account for keyframe positioning
+        let seek_sample = (start_frame as f64 * 0.9) as u64;
+        let seek_ts = (seek_sample * tb.denom as u64) / (sample_rate as u64);
 
-            // Try to seek, but don't fail if seeking doesn't work
-            let _ = format.seek(
-                SeekMode::Accurate,
-                SeekTo::TimeStamp {
-                    ts: seek_ts,
-                    track_id,
-                },
-            );
-        }
+        // Try to seek, but don't fail if seeking doesn't work
+        let _ = format.seek(
+            SeekMode::Accurate,
+            SeekTo::TimeStamp {
+                ts: seek_ts,
+                track_id,
+            },
+        );
     }
 
     let dec_opts: DecoderOptions = Default::default();
@@ -226,21 +226,21 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
             num_channels = spec.channels.count();
 
             // Validate channel range
-            if let Some(start_ch) = start_channel {
-                if start_ch >= num_channels {
-                    return Err(AudioReadError::InvalidStartChannel(start_ch, num_channels));
-                }
+            if let Some(start_ch) = start_channel
+                && start_ch >= num_channels
+            {
+                return Err(AudioReadError::InvalidStartChannel(start_ch, num_channels));
             }
             if let Some(end_ch) = end_channel {
                 if end_ch > num_channels {
                     return Err(AudioReadError::InvalidEndChannel(end_ch, num_channels));
                 }
-                if let Some(start_ch) = start_channel {
-                    if end_ch <= start_ch {
-                        return Err(AudioReadError::EndChannelLargerThanStartChannel(
-                            end_ch, start_ch,
-                        ));
-                    }
+                if let Some(start_ch) = start_channel
+                    && end_ch <= start_ch
+                {
+                    return Err(AudioReadError::EndChannelLargerThanStartChannel(
+                        end_ch, start_ch,
+                    ));
                 }
             }
         }
@@ -264,16 +264,16 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
 
                 for frame_idx in 0..frames {
                     // Check if we've reached the end frame
-                    if let Some(end) = end_frame {
-                        if pos >= end as u64 {
-                            let num_frames = samples.len() / num_channels;
-                            return Ok(AudioData {
-                                sample_rate,
-                                num_channels,
-                                num_frames,
-                                interleaved_samples: samples,
-                            });
-                        }
+                    if let Some(end) = end_frame
+                        && pos >= end as u64
+                    {
+                        let num_frames = samples.len() / num_channels;
+                        return Ok(AudioData {
+                            sample_rate,
+                            num_channels,
+                            num_frames,
+                            interleaved_samples: samples,
+                        });
                     }
 
                     // Start collecting samples once we reach start_frame
@@ -293,16 +293,16 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
 
                 for frame_idx in 0..frames {
                     // Check if we've reached the end frame
-                    if let Some(end) = end_frame {
-                        if pos >= end as u64 {
-                            let num_frames = samples.len() / num_channels;
-                            return Ok(AudioData {
-                                sample_rate,
-                                num_channels,
-                                num_frames,
-                                interleaved_samples: samples,
-                            });
-                        }
+                    if let Some(end) = end_frame
+                        && pos >= end as u64
+                    {
+                        let num_frames = samples.len() / num_channels;
+                        return Ok(AudioData {
+                            sample_rate,
+                            num_channels,
+                            num_frames,
+                            interleaved_samples: samples,
+                        });
                     }
 
                     // Start collecting samples once we reach start_frame
