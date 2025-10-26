@@ -8,10 +8,31 @@ approx = "0.5.1"
 audio-blocks = "0.4.0"
 hound = { version = "3.5", optional = true }
 num = "0.4.3"
-symphonia = {version = "0.5.5", optional = true}
+symphonia = { version = "0.5.5", optional = true }
 thiserror = "2.0.17"
 
 [features]
-default = ["read", "write"]
+# Only royalty-free open standard codecs and formats are enabled by default.
+default = ["read", "write", "adpcm", "flac", "mkv", "ogg", "pcm", "vorbis", "wav"]
 read = ["dep:symphonia"]
 write = ["dep:hound"]
+
+# select which codecs and formats you want to read
+aac = ["symphonia?/aac"]
+adpcm = ["symphonia?/adpcm"]
+alac = ["symphonia?/alac"]
+flac = ["symphonia?/flac"]
+caf = ["symphonia?/caf"]
+isomp4 = ["symphonia?/isomp4"]
+mkv = ["symphonia?/mkv"]
+mp1 = ["symphonia?/mp1"]
+mp2 = ["symphonia?/mp2"]
+mp3 = ["symphonia?/mp3"]
+ogg = ["symphonia?/ogg"]
+pcm = ["symphonia?/pcm"]
+aiff = ["symphonia?/aiff"]
+vorbis = ["symphonia?/vorbis"]
+wav = ["symphonia?/wav"]
+
+# Enable all supported codecs and formats.
+all = ["symphonia?/all"]
