@@ -9,9 +9,10 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
 /// Starting position in the audio stream
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Start {
     /// Start from the beginning of the audio
+    #[default]
     Beginning,
     /// Start at a specific time offset
     Time(std::time::Duration),
@@ -19,27 +20,16 @@ pub enum Start {
     Frame(usize),
 }
 
-impl Default for Start {
-    fn default() -> Self {
-        Start::Beginning
-    }
-}
-
 /// Ending position in the audio stream
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Stop {
     /// Read until the end of the audio
+    #[default]
     End,
     /// Stop at a specific time offset
     Time(std::time::Duration),
     /// Stop at a specific frame number (sample position across all channels)
     Frame(usize),
-}
-
-impl Default for Stop {
-    fn default() -> Self {
-        Stop::End
-    }
 }
 
 #[derive(Default)]
@@ -55,14 +45,14 @@ pub struct AudioReadConfig {
 }
 
 pub fn read_audio(
-    path: &str,
+    path: impl AsRef<Path>,
     config: AudioReadConfig,
 ) -> Result<(u32, usize, Vec<f32>), Box<dyn std::error::Error>> {
-    let src = File::open(Path::new(path))?;
+    let src = File::open(path.as_ref())?;
     let mss = MediaSourceStream::new(Box::new(src), Default::default());
 
     let mut hint = Hint::new();
-    if let Some(ext) = Path::new(path).extension() {
+    if let Some(ext) = path.as_ref().extension() {
         if let Some(ext_str) = ext.to_str() {
             hint.with_extension(ext_str);
         }
