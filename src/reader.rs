@@ -63,23 +63,26 @@ pub struct AudioReadConfig {
     /// Where to stop reading audio (time or frame-based)
     pub stop: Stop,
     /// First channel to extract (0-indexed). None means start from channel 0.
-    pub start_channel: Option<usize>,
+    pub first_channel: Option<usize>,
     /// Last channel to extract (exclusive). None means extract to the last channel.
-    pub end_channel: Option<usize>,
+    pub last_channel: Option<usize>,
 }
 
 #[derive(Default)]
 pub struct AudioData<F: Float + 'static> {
-    pub samples: Vec<F>,
+    pub interleaved_samples: Vec<F>,
     pub sample_rate: u32,
     pub num_channels: usize,
     pub num_frames: usize,
 }
 
 impl<F: Float> AudioData<F> {
+    // Convert into audio block, which makes it easy to access
+    // channels and frames or convert into any other layout.
+    // See [audio-blocks](https://crates.io/crates/audio-blocks) for more info.
     pub fn audio_block(&self) -> AudioBlockInterleavedView<'_, F> {
         AudioBlockInterleavedView::from_slice(
-            &self.samples,
+            &self.interleaved_samples,
             self.num_channels as u16,
             self.num_frames,
         )
@@ -176,8 +179,8 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
     let mut sample_buf = None;
     let mut samples = Vec::new();
     let mut num_channels = 0usize;
-    let start_channel = config.start_channel;
-    let end_channel = config.end_channel;
+    let start_channel = config.first_channel;
+    let end_channel = config.last_channel;
 
     // We'll track exact position by counting samples as we decode
     let mut current_sample: Option<u64> = None;
@@ -266,7 +269,7 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
                                 sample_rate,
                                 num_channels,
                                 num_frames,
-                                samples,
+                                interleaved_samples: samples,
                             });
                         }
                     }
@@ -295,7 +298,7 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
                                 sample_rate,
                                 num_channels,
                                 num_frames,
-                                samples,
+                                interleaved_samples: samples,
                             });
                         }
                     }
@@ -327,7 +330,7 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
         sample_rate,
         num_channels,
         num_frames,
-        samples,
+        interleaved_samples: samples,
     })
 }
 
@@ -417,7 +420,7 @@ mod tests {
         match audio_read::<_, f32>(
             "test.wav",
             AudioReadConfig {
-                start_channel: Some(1),
+                first_channel: Some(1),
                 ..Default::default()
             },
         ) {
@@ -428,7 +431,7 @@ mod tests {
         match audio_read::<_, f32>(
             "test.wav",
             AudioReadConfig {
-                end_channel: Some(2),
+                last_channel: Some(2),
                 ..Default::default()
             },
         ) {

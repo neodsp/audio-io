@@ -30,7 +30,7 @@ pub struct AudioWriteConfig {
 
 pub fn audio_write<P: AsRef<Path>, F: Float + 'static>(
     path: P,
-    audio_block: &impl AudioBlock<F>,
+    audio_block: impl AudioBlock<F>,
     sample_rate: u32,
     config: AudioWriteConfig,
 ) -> Result<(), AudioWriteError> {
@@ -90,7 +90,7 @@ mod tests {
 
         audio_write(
             "tmp1.wav",
-            &data1.audio_block(),
+            data1.audio_block(),
             data1.sample_rate,
             AudioWriteConfig {
                 sample_format: WriteSampleFormat::Int16,
@@ -119,7 +119,7 @@ mod tests {
 
         audio_write(
             "tmp2.wav",
-            &data1.audio_block(),
+            data1.audio_block(),
             data1.sample_rate,
             AudioWriteConfig {
                 sample_format: WriteSampleFormat::Float32,
