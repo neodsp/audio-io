@@ -4,4 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-symphonia = "0.5.5"
+audio-blocks = "0.4.0"
+hound = { version = "3.5", optional = true }
+num = "0.4.3"
+symphonia = {version = "0.5.5", optional = true}
+
+[features]
+default = ["read", "write"]
+read = ["dep:symphonia"]
+write = ["dep:hound"]
