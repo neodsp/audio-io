@@ -1,7 +1,8 @@
 [package]
-name = "audio-io"
-version = "0.1.0"
 edition = "2024"
+name = "audio-io"
+rust-version = "1.88"
+version = "0.1.0"
 
 [dependencies]
 approx = "0.5.1"
@@ -13,16 +14,17 @@ thiserror = "2.0.17"
 
 [features]
 # Only royalty-free open standard codecs and formats are enabled by default.
-default = ["read", "write", "adpcm", "flac", "mkv", "ogg", "pcm", "vorbis", "wav"]
+default = ["adpcm", "flac", "mkv", "ogg", "pcm", "read", "vorbis", "wav", "write"]
 read = ["dep:symphonia"]
 write = ["dep:hound"]
 
 # select which codecs and formats you want to read
 aac = ["symphonia?/aac"]
 adpcm = ["symphonia?/adpcm"]
+aiff = ["symphonia?/aiff"]
 alac = ["symphonia?/alac"]
-flac = ["symphonia?/flac"]
 caf = ["symphonia?/caf"]
+flac = ["symphonia?/flac"]
 isomp4 = ["symphonia?/isomp4"]
 mkv = ["symphonia?/mkv"]
 mp1 = ["symphonia?/mp1"]
@@ -30,7 +32,6 @@ mp2 = ["symphonia?/mp2"]
 mp3 = ["symphonia?/mp3"]
 ogg = ["symphonia?/ogg"]
 pcm = ["symphonia?/pcm"]
-aiff = ["symphonia?/aiff"]
 vorbis = ["symphonia?/vorbis"]
 wav = ["symphonia?/wav"]
 
