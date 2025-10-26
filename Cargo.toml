@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+approx = "0.5.1"
 audio-blocks = "0.4.0"
 hound = { version = "3.5", optional = true }
 num = "0.4.3"
 symphonia = {version = "0.5.5", optional = true}
+thiserror = "2.0.17"
 
 [features]
 default = ["read", "write"]
