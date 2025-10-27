@@ -72,7 +72,7 @@ To enable all formats, use the `all` feature flag.
 When reading a file you can specify the following things:
 
 - Start and stop in frames or time
-- First and last channel
+- First channel and number of channels
 
 The crate will try to decode and store only the parts that you selected.
 
@@ -83,13 +83,14 @@ By default `Int16` is selected, for broader compatibility.
 
 ### Some example configs:
 
-- read exactly 100 frames starting from frame 300
+- read from frame 300 to 400
+
 ```rs,ignore
 let audio = audio_read::<_, f32>(
     "test.wav",
     AudioReadConfig {
-        start: Start::Frame(300),
-        stop: Stop::Frame(400),
+        start: Position::Frame(300),
+        stop: Position::Frame(400),
         ..Default::default()
     },
 ).unwrap();
@@ -98,10 +99,12 @@ let audio = audio_read::<_, f32>(
 - read the first 0.5 seconds
 
 ```rs,ignore
+use std::time::Duration;
+
 let audio = audio_read::<_, f32>(
     "test.wav",
     AudioReadConfig {
-        stop: Stop::Time(std::time::Duration::from_secs_f32(0.5)),
+        stop: Position::Time(Duration::from_secs_f32(0.5)),
         ..Default::default()
     },
 ).unwrap();
@@ -113,19 +116,20 @@ let audio = audio_read::<_, f32>(
 let audio = audio_read::<_, f32>(
     "test.wav",
     AudioReadConfig {
-        last_channel: Some(2), // exclusive
+        num_channels: Some(2),
         ..Default::default()
     },
 ).unwrap();
 ```
 
-- skip the first channel
+- skip the first channel, reading channel 2 and 3
 
 ```rs,ignore
 let audio = audio_read::<_, f32>(
     "test.wav",
     AudioReadConfig {
         first_channel: Some(1),
+        num_channels: Some(2),
         ..Default::default()
     },
 ).unwrap();

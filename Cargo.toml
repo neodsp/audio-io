@@ -9,7 +9,7 @@ name = "audio-io"
 readme = "README.md"
 repository = "https://github.com/neodsp/audio-io"
 rust-version = "1.88"
-version = "0.1.0"
+version = "0.2.0"
 
 [dependencies]
 approx = "0.5.1"

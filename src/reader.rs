@@ -24,48 +24,34 @@ pub enum AudioReadError {
     NoSampleRate,
     #[error("end frame {0} is larger than start frame {1}")]
     EndFrameLargerThanStartFrame(usize, usize),
-    #[error("start channel {0} invalid, audio file has only {1}")]
+    #[error("start channel {0} invalid, audio file has only {1} channels")]
     InvalidStartChannel(usize, usize),
-    #[error("end channel {0} invalid, audio file has only {1}")]
-    InvalidEndChannel(usize, usize),
-    #[error("end channel {0} is larger than start channel {1}")]
-    EndChannelLargerThanStartChannel(usize, usize),
+    #[error("invalid number of channels to extract: {0}")]
+    InvalidNumChannels(usize),
 }
 
-/// Starting position in the audio stream
-#[derive(Debug, Clone, Copy, Default)]
-pub enum Start {
-    /// Start from the beginning of the audio
+/// Position in the audio stream (for start or stop points)
+#[derive(Default, Debug, Clone, Copy)]
+pub enum Position {
+    /// Start from beginning or read until the end (depending on context)
     #[default]
-    Beginning,
-    /// Start at a specific time offset
+    Default,
+    /// Specific time offset
     Time(std::time::Duration),
-    /// Start at a specific frame number (sample position across all channels)
-    Frame(usize),
-}
-
-/// Ending position in the audio stream
-#[derive(Debug, Clone, Copy, Default)]
-pub enum Stop {
-    /// Read until the end of the audio
-    #[default]
-    End,
-    /// Stop at a specific time offset
-    Time(std::time::Duration),
-    /// Stop at a specific frame number (sample position across all channels)
+    /// Specific frame number (sample position across all channels)
     Frame(usize),
 }
 
 #[derive(Default)]
 pub struct AudioReadConfig {
     /// Where to start reading audio (time or frame-based)
-    pub start: Start,
+    pub start: Position,
     /// Where to stop reading audio (time or frame-based)
-    pub stop: Stop,
-    /// First channel to extract (0-indexed). None means start from channel 0.
-    pub first_channel: Option<usize>,
-    /// Last channel to extract (exclusive). None means extract to the last channel.
-    pub last_channel: Option<usize>,
+    pub stop: Position,
+    /// Starting channel to extract (0-indexed). None means start from channel 0.
+    pub start_channel: Option<usize>,
+    /// Number of channels to extract. None means extract all remaining channels.
+    pub num_channels: Option<usize>,
 }
 
 #[derive(Default)]
@@ -129,23 +115,23 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
     let codec_params = track.codec_params.clone();
     let time_base = track.codec_params.time_base;
 
-    // Convert Start/Stop to frame numbers
+    // Convert start/stop positions to frame numbers
     let start_frame = match config.start {
-        Start::Beginning => 0,
-        Start::Time(duration) => {
+        Position::Default => 0,
+        Position::Time(duration) => {
             let secs = duration.as_secs_f64();
             (secs * sample_rate as f64) as usize
         }
-        Start::Frame(frame) => frame,
+        Position::Frame(frame) => frame,
     };
 
     let end_frame: Option<usize> = match config.stop {
-        Stop::End => None,
-        Stop::Time(duration) => {
+        Position::Default => None,
+        Position::Time(duration) => {
             let secs = duration.as_secs_f64();
             Some((secs * sample_rate as f64) as usize)
         }
-        Stop::Frame(frame) => Some(frame),
+        Position::Frame(frame) => Some(frame),
     };
 
     if let Some(end_frame) = end_frame
@@ -181,8 +167,7 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
     let mut sample_buf = None;
     let mut samples = Vec::new();
     let mut num_channels = 0usize;
-    let start_channel = config.first_channel;
-    let end_channel = config.last_channel;
+    let start_channel = config.start_channel;
 
     // We'll track exact position by counting samples as we decode
     let mut current_sample: Option<u64> = None;
@@ -226,22 +211,17 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
             num_channels = spec.channels.count();
 
             // Validate channel range
-            if let Some(start_ch) = start_channel
-                && start_ch >= num_channels
-            {
-                return Err(AudioReadError::InvalidStartChannel(start_ch, num_channels));
+            let ch_start = start_channel.unwrap_or(0);
+            let ch_count = config.num_channels.unwrap_or(num_channels - ch_start);
+
+            if ch_start >= num_channels {
+                return Err(AudioReadError::InvalidStartChannel(ch_start, num_channels));
             }
-            if let Some(end_ch) = end_channel {
-                if end_ch > num_channels {
-                    return Err(AudioReadError::InvalidEndChannel(end_ch, num_channels));
-                }
-                if let Some(start_ch) = start_channel
-                    && end_ch <= start_ch
-                {
-                    return Err(AudioReadError::EndChannelLargerThanStartChannel(
-                        end_ch, start_ch,
-                    ));
-                }
+            if ch_count == 0 {
+                return Err(AudioReadError::InvalidNumChannels(0));
+            }
+            if ch_start + ch_count > num_channels {
+                return Err(AudioReadError::InvalidNumChannels(ch_count));
             }
         }
 
@@ -253,69 +233,38 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
 
             // Determine channel range to extract
             let ch_start = start_channel.unwrap_or(0);
-            let ch_end = end_channel.unwrap_or(num_channels);
-            let num_channels = ch_end - ch_start;
+            let ch_count = config.num_channels.unwrap_or(num_channels - ch_start);
+            let ch_end = ch_start + ch_count;
 
-            // Process samples based on whether we're filtering channels
-            if ch_start != 0 || ch_end != num_channels {
-                // Channel filtering: samples are interleaved [L, R, L, R, ...] for stereo
-                // We need to extract only the requested channel range
-                let frames = packet_samples.len() / num_channels;
+            // Calculate frames using the ORIGINAL channel count from the file
+            let frames = packet_samples.len() / num_channels;
 
-                for frame_idx in 0..frames {
-                    // Check if we've reached the end frame
-                    if let Some(end) = end_frame
-                        && pos >= end as u64
-                    {
-                        let num_frames = samples.len() / num_channels;
-                        return Ok(AudioData {
-                            sample_rate,
-                            num_channels,
-                            num_frames,
-                            interleaved_samples: samples,
-                        });
-                    }
-
-                    // Start collecting samples once we reach start_frame
-                    if pos >= start_frame as u64 {
-                        // Extract only the selected channel range from this frame
-                        for ch in ch_start..ch_end {
-                            let sample_idx = frame_idx * num_channels + ch;
-                            samples.push(F::from(packet_samples[sample_idx]).unwrap());
-                        }
-                    }
-
-                    pos += 1;
+            // Process all frames, extracting only the requested channel range
+            for frame_idx in 0..frames {
+                // Check if we've reached the end frame
+                if let Some(end) = end_frame
+                    && pos >= end as u64
+                {
+                    let num_frames = samples.len() / ch_count;
+                    return Ok(AudioData {
+                        sample_rate,
+                        num_channels: ch_count,
+                        num_frames,
+                        interleaved_samples: samples,
+                    });
                 }
-            } else {
-                // No channel filtering: collect all samples
-                let frames = packet_samples.len() / num_channels;
 
-                for frame_idx in 0..frames {
-                    // Check if we've reached the end frame
-                    if let Some(end) = end_frame
-                        && pos >= end as u64
-                    {
-                        let num_frames = samples.len() / num_channels;
-                        return Ok(AudioData {
-                            sample_rate,
-                            num_channels,
-                            num_frames,
-                            interleaved_samples: samples,
-                        });
+                // Start collecting samples once we reach start_frame
+                if pos >= start_frame as u64 {
+                    // Extract the selected channel range from this frame
+                    // When ch_start=0 and ch_count=num_channels, this extracts all channels
+                    for ch in ch_start..ch_end {
+                        let sample_idx = frame_idx * num_channels + ch;
+                        samples.push(F::from(packet_samples[sample_idx]).unwrap());
                     }
-
-                    // Start collecting samples once we reach start_frame
-                    if pos >= start_frame as u64 {
-                        // Collect all channels from this frame
-                        for ch in 0..num_channels {
-                            let sample_idx = frame_idx * num_channels + ch;
-                            samples.push(F::from(packet_samples[sample_idx]).unwrap());
-                        }
-                    }
-
-                    pos += 1;
                 }
+
+                pos += 1;
             }
 
             // Update our position tracker
@@ -324,13 +273,12 @@ pub fn audio_read<P: AsRef<Path>, F: Float>(
     }
 
     let ch_start = start_channel.unwrap_or(0);
-    let ch_end = end_channel.unwrap_or(num_channels);
-    let num_channels = ch_end - ch_start;
-    let num_frames = samples.len() / num_channels;
+    let ch_count = config.num_channels.unwrap_or(num_channels - ch_start);
+    let num_frames = samples.len() / ch_count;
 
     Ok(AudioData {
         sample_rate,
-        num_channels,
+        num_channels: ch_count,
         num_frames,
         interleaved_samples: samples,
     })
@@ -346,17 +294,18 @@ mod tests {
 
     #[test]
     fn test_samples_selection() {
-        let data1: AudioData<f32> = audio_read("test.wav", AudioReadConfig::default()).unwrap();
+        let data1: AudioData<f32> =
+            audio_read("test_data/test_1ch.wav", AudioReadConfig::default()).unwrap();
         let block1 = data1.audio_block();
         assert_eq!(data1.sample_rate, 48000);
         assert_eq!(block1.num_frames(), 48000);
         assert_eq!(block1.num_channels(), 1);
 
         let data2: AudioData<f32> = audio_read(
-            "test.wav",
+            "test_data/test_1ch.wav",
             AudioReadConfig {
-                start: Start::Frame(1100),
-                stop: Stop::Frame(1200),
+                start: Position::Frame(1100),
+                stop: Position::Frame(1200),
                 ..Default::default()
             },
         )
@@ -370,17 +319,18 @@ mod tests {
 
     #[test]
     fn test_time_selection() {
-        let data1: AudioData<f32> = audio_read("test.wav", AudioReadConfig::default()).unwrap();
+        let data1: AudioData<f32> =
+            audio_read("test_data/test_1ch.wav", AudioReadConfig::default()).unwrap();
         let block1 = data1.audio_block();
         assert_eq!(data1.sample_rate, 48000);
         assert_eq!(block1.num_frames(), 48000);
         assert_eq!(block1.num_channels(), 1);
 
         let data2: AudioData<f32> = audio_read(
-            "test.wav",
+            "test_data/test_1ch.wav",
             AudioReadConfig {
-                start: Start::Time(Duration::from_secs_f32(0.5)),
-                stop: Stop::Time(Duration::from_secs_f32(0.6)),
+                start: Position::Time(Duration::from_secs_f32(0.5)),
+                stop: Position::Time(Duration::from_secs_f32(0.6)),
                 ..Default::default()
             },
         )
@@ -394,12 +344,43 @@ mod tests {
     }
 
     #[test]
+    fn test_channel_selection() {
+        let data1: AudioData<f32> =
+            audio_read("test_data/test_4ch.wav", AudioReadConfig::default()).unwrap();
+        let block1 = data1.audio_block();
+        assert_eq!(data1.sample_rate, 48000);
+        assert_eq!(block1.num_frames(), 48000);
+        assert_eq!(block1.num_channels(), 4);
+
+        let data2: AudioData<f32> = audio_read(
+            "test_data/test_4ch.wav",
+            AudioReadConfig {
+                start_channel: Some(1),
+                num_channels: Some(2),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let block2 = data2.audio_block();
+        assert_eq!(data2.sample_rate, 48000);
+        assert_eq!(block2.num_frames(), 48000);
+        assert_eq!(block2.num_channels(), 2);
+
+        // Verify we extracted channels 1 and 2 (skipping channel 0 and 3)
+        for frame in 0..10 {
+            assert_eq!(block2.sample(0, frame), block1.sample(1, frame));
+            assert_eq!(block2.sample(1, frame), block1.sample(2, frame));
+        }
+    }
+
+    #[test]
     fn test_fail_selection() {
         match audio_read::<_, f32>(
-            "test.wav",
+            "test_data/test_1ch.wav",
             AudioReadConfig {
-                start: Start::Frame(100),
-                stop: Stop::Frame(99),
+                start: Position::Frame(100),
+                stop: Position::Frame(99),
                 ..Default::default()
             },
         ) {
@@ -408,10 +389,10 @@ mod tests {
         }
 
         match audio_read::<_, f32>(
-            "test.wav",
+            "test_data/test_1ch.wav",
             AudioReadConfig {
-                start: Start::Time(Duration::from_secs_f32(0.6)),
-                stop: Stop::Time(Duration::from_secs_f32(0.5)),
+                start: Position::Time(Duration::from_secs_f32(0.6)),
+                stop: Position::Time(Duration::from_secs_f32(0.5)),
                 ..Default::default()
             },
         ) {
@@ -420,9 +401,9 @@ mod tests {
         }
 
         match audio_read::<_, f32>(
-            "test.wav",
+            "test_data/test_1ch.wav",
             AudioReadConfig {
-                first_channel: Some(1),
+                start_channel: Some(1),
                 ..Default::default()
             },
         ) {
@@ -431,13 +412,24 @@ mod tests {
         }
 
         match audio_read::<_, f32>(
-            "test.wav",
+            "test_data/test_1ch.wav",
             AudioReadConfig {
-                last_channel: Some(2),
+                num_channels: Some(0),
                 ..Default::default()
             },
         ) {
-            Err(AudioReadError::InvalidEndChannel(_, _)) => (),
+            Err(AudioReadError::InvalidNumChannels(0)) => (),
+            _ => panic!(),
+        }
+
+        match audio_read::<_, f32>(
+            "test_data/test_1ch.wav",
+            AudioReadConfig {
+                num_channels: Some(2),
+                ..Default::default()
+            },
+        ) {
+            Err(AudioReadError::InvalidNumChannels(2)) => (),
             _ => panic!(),
         }
     }
