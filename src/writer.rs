@@ -86,7 +86,8 @@ mod tests {
         use super::*;
         use crate::reader::{AudioReadConfig, audio_read};
 
-        let data1 = audio_read::<_, f32>("test.wav", AudioReadConfig::default()).unwrap();
+        let data1 =
+            audio_read::<_, f32>("test_data/test_1ch.wav", AudioReadConfig::default()).unwrap();
 
         audio_write(
             "tmp1.wav",
@@ -115,7 +116,8 @@ mod tests {
         use super::*;
         use crate::reader::{AudioReadConfig, audio_read};
 
-        let data1 = audio_read::<_, f32>("test.wav", AudioReadConfig::default()).unwrap();
+        let data1 =
+            audio_read::<_, f32>("test_data/test_1ch.wav", AudioReadConfig::default()).unwrap();
 
         audio_write(
             "tmp2.wav",

@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 #[cfg(feature = "read")]
-pub use reader::{AudioData, AudioReadConfig, AudioReadError, Start, Stop, audio_read};
+pub use reader::{AudioData, AudioReadConfig, AudioReadError, Position, audio_read};
 
 #[cfg(feature = "write")]
 pub use writer::{AudioWriteConfig, AudioWriteError, audio_write};
